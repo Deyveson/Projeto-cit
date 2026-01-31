@@ -26,6 +26,9 @@ services:
       SECRET_KEY: your-super-secret-key-change-in-production-please
       ALGORITHM: HS256
       ACCESS_TOKEN_EXPIRE_MINUTES: 30
+      MERCADOPAGO_ACCESS_TOKEN: TEST-422604264266269-060916-a9ecd2fa71807c4b292c427893b3104b-211982678
+      MERCADOPAGO_PUBLIC_KEY: TEST-119771cd-08df-4688-983a-24ae0338d156
+      MERCADOPAGO_USER_ID: 211982678
     depends_on:
       - mongo
     networks:

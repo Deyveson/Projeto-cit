@@ -15,7 +15,7 @@ export function Confirmation() {
     }
 
     // Verifica se o usuário está logado
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('access_token');
     setIsLoggedIn(!!token);
   }, []);
 

@@ -54,6 +54,30 @@ async def create_order(
             detail="Método de pagamento inválido"
         )
     
+    # Busca os dados da empresa para associar ao pedido
+    # Se tiver slug, busca por ele, senão busca a empresa padrão
+    if order_data.company_slug:
+        company_config = await db.config.find_one({
+            "type": "company",
+            "slug": order_data.company_slug
+        })
+        # Se não encontrar pelo slug, tenta buscar e verificar pelo nome
+        if not company_config:
+            company_config = await db.config.find_one({"type": "company"})
+    else:
+        company_config = await db.config.find_one({"type": "company"})
+    
+    company_data = None
+    if company_config:
+        company_data = {
+            "name": company_config.get("name", ""),
+            "slug": company_config.get("slug", order_data.company_slug),
+            "cnpj": company_config.get("cnpj", ""),
+            "email": company_config.get("email", ""),
+            "phone": company_config.get("phone", ""),
+            "address": company_config.get("address", "")
+        }
+    
     # Cria o pedido
     order_dict = {
         "user_id": str(current_user["_id"]),
@@ -62,6 +86,9 @@ async def create_order(
         "status": "pending",
         "total_amount": voucher["price"],
         "voucher_hours": voucher["hours"],
+        "voucher_name": voucher["name"],
+        "company": company_data,
+        "company_slug": order_data.company_slug,
         "created_at": datetime.now(timezone.utc),
         "paid_at": None
     }

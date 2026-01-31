@@ -1,20 +1,36 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, CreditCard, QrCode } from 'lucide-react';
+import { ArrowLeft, CreditCard, QrCode, Copy, Check, Loader2 } from 'lucide-react';
 import { Voucher, orderAPI, paymentAPI } from '@/services/api';
+
+// Declaração global para o SDK do Mercado Pago
+declare global {
+  interface Window {
+    MercadoPago: any;
+  }
+}
 
 export function Payment() {
   const navigate = useNavigate();
   const [selectedVoucher, setSelectedVoucher] = useState<Voucher | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'pix' | 'credit' | 'debit'>('pix');
   const [loading, setLoading] = useState(false);
+  const [checkingPayment, setCheckingPayment] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pixCode, setPixCode] = useState<string>('');
+  const [pixKey, setPixKey] = useState<string>('');
+  const [orderId, setOrderId] = useState<string>('');
+  const [copied, setCopied] = useState(false);
+  const [mpReady, setMpReady] = useState(false);
+  const [processingCard, setProcessingCard] = useState(false);
+  const cardFormRef = useRef<any>(null);
   const [cardData, setCardData] = useState({
     name: '',
     number: '',
     expiry: '',
     cvv: '',
+    cpf: '',
+    email: '',
   });
 
   useEffect(() => {
@@ -26,6 +42,88 @@ export function Payment() {
     }
   }, [navigate]);
 
+  // Carrega o SDK do Mercado Pago
+  useEffect(() => {
+    const loadMercadoPago = async () => {
+      try {
+        // Carrega o script do SDK se ainda não existir
+        if (!document.getElementById('mercadopago-sdk')) {
+          const script = document.createElement('script');
+          script.id = 'mercadopago-sdk';
+          script.src = 'https://sdk.mercadopago.com/js/v2';
+          script.async = true;
+          script.onload = async () => {
+            // Busca a public key do backend
+            const { public_key } = await paymentAPI.getMercadoPagoPublicKey();
+            if (public_key && window.MercadoPago) {
+              const mp = new window.MercadoPago(public_key, {
+                locale: 'pt-BR'
+              });
+              cardFormRef.current = mp;
+              setMpReady(true);
+            }
+          };
+          document.body.appendChild(script);
+        } else if (window.MercadoPago) {
+          const { public_key } = await paymentAPI.getMercadoPagoPublicKey();
+          if (public_key) {
+            const mp = new window.MercadoPago(public_key, {
+              locale: 'pt-BR'
+            });
+            cardFormRef.current = mp;
+            setMpReady(true);
+          }
+        }
+      } catch (err) {
+        console.error('Erro ao carregar Mercado Pago SDK:', err);
+        // Continua sem SDK - usará modo fallback
+        setMpReady(false);
+      }
+    };
+
+    loadMercadoPago();
+  }, []);
+
+  const createCardToken = async (): Promise<string | null> => {
+    if (!cardFormRef.current || !mpReady) {
+      return null; // Fallback mode
+    }
+
+    try {
+      // Separa mês e ano da validade
+      const [expMonth, expYear] = cardData.expiry.split('/');
+      
+      const cardTokenData = {
+        cardNumber: cardData.number.replace(/\s/g, ''),
+        cardholderName: cardData.name,
+        cardExpirationMonth: expMonth,
+        cardExpirationYear: `20${expYear}`,
+        securityCode: cardData.cvv,
+        identificationType: 'CPF',
+        identificationNumber: cardData.cpf.replace(/\D/g, ''),
+      };
+
+      const response = await cardFormRef.current.createCardToken(cardTokenData);
+      return response.id;
+    } catch (err: any) {
+      console.error('Erro ao criar token do cartão:', err);
+      throw new Error(err.message || 'Erro ao processar dados do cartão');
+    }
+  };
+
+  const detectCardBrand = (number: string): string => {
+    const cleanNumber = number.replace(/\s/g, '');
+    if (cleanNumber.startsWith('4')) return 'visa';
+    if (/^5[1-5]/.test(cleanNumber)) return 'master';
+    if (/^3[47]/.test(cleanNumber)) return 'amex';
+    if (/^6(?:011|5)/.test(cleanNumber)) return 'discover';
+    if (/^(36|38|30[0-5])/.test(cleanNumber)) return 'diners';
+    if (cleanNumber.startsWith('35')) return 'jcb';
+    if (/^(50|6[0-9])/.test(cleanNumber)) return 'elo';
+    if (/^(606282|3841)/.test(cleanNumber)) return 'hipercard';
+    return 'master'; // Default
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedVoucher) return;
@@ -34,10 +132,14 @@ export function Payment() {
     setError(null);
 
     try {
-      // 1. Criar o pedido com o método de pagamento
+      // Busca o slug da empresa do localStorage
+      const companySlug = localStorage.getItem('company_slug') || undefined;
+      
+      // 1. Criar o pedido com o método de pagamento e slug da empresa
       const order = await orderAPI.create({
         voucher_id: selectedVoucher.id,
         payment_method: paymentMethod,
+        company_slug: companySlug,
       });
 
       // 2. Processar o pagamento
@@ -46,34 +148,120 @@ export function Payment() {
         payment_method: paymentMethod,
       };
 
-      // Se for cartão, adiciona os dados do cartão
+      // Se for cartão, tenta criar token via Mercado Pago
       if (paymentMethod === 'credit' || paymentMethod === 'debit') {
-        paymentData.card_number = cardData.number.replace(/\s/g, '');
-        paymentData.card_cvv = cardData.cvv;
-        paymentData.card_expiry = cardData.expiry;
+        // Valida campos obrigatórios
+        if (!cardData.name || !cardData.number || !cardData.expiry || !cardData.cvv) {
+          throw new Error('Preencha todos os dados do cartão');
+        }
+
+        if (mpReady && cardData.cpf && cardData.email) {
+          // Tenta usar o SDK do Mercado Pago
+          try {
+            setProcessingCard(true);
+            const token = await createCardToken();
+            setProcessingCard(false);
+            
+            if (token) {
+              paymentData.card_token = token;
+              paymentData.card_payment_method_id = detectCardBrand(cardData.number);
+              paymentData.card_installments = 1;
+              paymentData.payer_email = cardData.email;
+              paymentData.card_holder_name = cardData.name;
+              paymentData.identification_type = 'CPF';
+              paymentData.identification_number = cardData.cpf.replace(/\D/g, '');
+            } else {
+              // Fallback para modo simulação
+              paymentData.card_number = cardData.number.replace(/\s/g, '');
+              paymentData.card_cvv = cardData.cvv;
+              paymentData.card_expiry = cardData.expiry;
+              paymentData.payer_email = cardData.email || 'cliente@email.com';
+              paymentData.card_holder_name = cardData.name;
+            }
+          } catch (tokenError) {
+            console.log('Token creation failed, using fallback mode');
+            setProcessingCard(false);
+            // Fallback para modo simulação
+            paymentData.card_number = cardData.number.replace(/\s/g, '');
+            paymentData.card_cvv = cardData.cvv;
+            paymentData.card_expiry = cardData.expiry;
+            paymentData.payer_email = cardData.email || 'cliente@email.com';
+            paymentData.card_holder_name = cardData.name;
+          }
+        } else {
+          // Modo simulação (sem SDK ou dados incompletos)
+          paymentData.card_number = cardData.number.replace(/\s/g, '');
+          paymentData.card_cvv = cardData.cvv;
+          paymentData.card_expiry = cardData.expiry;
+          paymentData.payer_email = cardData.email || 'cliente@email.com';
+          paymentData.card_holder_name = cardData.name;
+        }
       }
 
       const payment = await paymentAPI.process(paymentData);
 
-      // Se for PIX, guarda o QR code
+      // Se for PIX, guarda o QR code e a chave
       if (payment.pix_qrcode) {
         setPixCode(payment.pix_qrcode);
+        setPixKey(payment.pix_key || '');
+        setOrderId(order.id);
+        // Para PIX, não redireciona - usuário precisa pagar primeiro
+      } else {
+        // Para cartão, redireciona imediatamente pois é aprovado instantaneamente
+        localStorage.removeItem('selectedVoucher');
+        localStorage.setItem('lastPayment', JSON.stringify({
+          ...payment,
+          hours: selectedVoucher.hours,
+        }));
+        
+        setTimeout(() => {
+          navigate('/confirmacao');
+        }, 1000);
       }
-
-      // Limpa o voucher selecionado e redireciona
-      localStorage.removeItem('selectedVoucher');
-      localStorage.setItem('lastPayment', JSON.stringify(payment));
-      
-      setTimeout(() => {
-        navigate('/confirmacao');
-      }, paymentMethod === 'pix' ? 2000 : 1000);
       
     } catch (err: any) {
       console.error('Payment error:', err);
-      setError(err.response?.data?.detail || 'Erro ao processar pagamento');
+      setProcessingCard(false);
+      const errorMessage = err.response?.data?.detail || err.message || 'Erro ao processar pagamento';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
+  };
+
+  const checkPaymentStatus = async () => {
+    if (!orderId) return;
+
+    setCheckingPayment(true);
+    setError(null);
+
+    try {
+      const payment = await paymentAPI.getStatus(orderId);
+      
+      if (payment.status === 'confirmed' || payment.status === 'paid') {
+        // Pagamento confirmado! Redireciona para confirmação
+        localStorage.removeItem('selectedVoucher');
+        localStorage.setItem('lastPayment', JSON.stringify({
+          ...payment,
+          hours: selectedVoucher?.hours || 0,
+        }));
+        
+        navigate('/confirmacao');
+      } else {
+        setError('Pagamento ainda não foi confirmado. Por favor, aguarde.');
+      }
+    } catch (err: any) {
+      console.error('Error checking payment:', err);
+      setError('Erro ao verificar status do pagamento');
+    } finally {
+      setCheckingPayment(false);
+    }
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   if (!selectedVoucher) {
@@ -154,7 +342,7 @@ export function Payment() {
                 </div>
 
                 {/* PIX */}
-                {paymentMethod === 'pix' && (
+                {paymentMethod === 'pix' && !pixCode && (
                   <div>
                     <h3 className="text-xl font-bold text-gray-900 mb-4">
                       Pagamento via PIX
@@ -164,27 +352,108 @@ export function Payment() {
                         <QrCode className="w-48 h-48 text-gray-800" />
                       </div>
                       <p className="text-gray-600 mb-2">
-                        Escaneie o QR Code com o app do seu banco
+                        Clique em confirmar para gerar o código PIX
                       </p>
                       <p className="text-2xl font-bold text-primary mb-4">
                         R$ {selectedVoucher.price.toFixed(2).replace('.', ',')}
                       </p>
-                      {pixCode && (
-                        <div className="bg-white rounded-lg p-4 mb-4">
-                          <p className="text-xs text-gray-500 mb-1">
-                            Código PIX:
-                          </p>
-                          <p className="font-mono text-sm text-gray-700 break-all">
-                            {pixCode}
-                          </p>
-                        </div>
-                      )}
                       <button
                         onClick={handleSubmit}
                         disabled={loading}
-                        className="w-full bg-secondary hover:bg-green-600 text-white py-4 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full bg-secondary hover:bg-green-600 text-white py-4 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                       >
-                        {loading ? 'Processando...' : 'Confirmar Pagamento'}
+                        {loading ? 'Gerando código PIX...' : 'Gerar Código PIX'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* PIX Code Gerado */}
+                {paymentMethod === 'pix' && pixCode && (
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900 mb-4">
+                      Pagamento via PIX
+                    </h3>
+                    <div className="bg-gradient-to-br from-blue-50 to-green-50 rounded-lg p-6">
+                      <div className="bg-white p-6 rounded-lg mb-4">
+                        <div className="text-center mb-4">
+                          <div className="bg-gray-100 p-4 rounded-lg inline-block mb-3">
+                            <QrCode className="w-32 h-32 text-gray-800" />
+                          </div>
+                          <p className="text-sm text-gray-600">
+                            Escaneie o QR Code acima com o app do seu banco
+                          </p>
+                        </div>
+
+                        <div className="border-t border-gray-200 pt-4">
+                          <p className="text-sm font-semibold text-gray-700 mb-2">
+                            Chave PIX:
+                          </p>
+                          <div className="flex items-center gap-2 bg-gray-50 p-3 rounded-lg">
+                            <span className="flex-1 font-mono text-sm text-gray-800 break-all">
+                              {pixKey}
+                            </span>
+                            <button
+                              onClick={() => copyToClipboard(pixKey)}
+                              className="p-2 hover:bg-gray-200 rounded transition-colors"
+                              title="Copiar chave PIX"
+                            >
+                              {copied ? (
+                                <Check className="w-5 h-5 text-green-600" />
+                              ) : (
+                                <Copy className="w-5 h-5 text-gray-600" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="border-t border-gray-200 mt-4 pt-4">
+                          <p className="text-sm font-semibold text-gray-700 mb-2">
+                            Código PIX Copia e Cola:
+                          </p>
+                          <div className="flex items-center gap-2 bg-gray-50 p-3 rounded-lg">
+                            <span className="flex-1 font-mono text-xs text-gray-800 break-all line-clamp-2">
+                              {pixCode}
+                            </span>
+                            <button
+                              onClick={() => copyToClipboard(pixCode)}
+                              className="p-2 hover:bg-gray-200 rounded transition-colors"
+                              title="Copiar código"
+                            >
+                              {copied ? (
+                                <Check className="w-5 h-5 text-green-600" />
+                              ) : (
+                                <Copy className="w-5 h-5 text-gray-600" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-white rounded-lg p-4 mb-4">
+                        <p className="text-2xl font-bold text-primary text-center">
+                          R$ {selectedVoucher.price.toFixed(2).replace('.', ',')}
+                        </p>
+                      </div>
+
+                      <div className="text-center text-sm text-gray-600 space-y-1 mb-4">
+                        <p>✓ Após realizar o pagamento, clique no botão abaixo para confirmar</p>
+                        <p>✓ O pagamento pode levar alguns instantes para ser processado</p>
+                      </div>
+
+                      <button
+                        onClick={checkPaymentStatus}
+                        disabled={checkingPayment}
+                        className="w-full bg-secondary hover:bg-green-600 text-white py-4 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        {checkingPayment ? (
+                          <>
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                            Verificando pagamento...
+                          </>
+                        ) : (
+                          'Já paguei - Confirmar Pagamento'
+                        )}
                       </button>
                     </div>
                   </div>
@@ -207,7 +476,7 @@ export function Payment() {
                           required
                           value={cardData.name}
                           onChange={(e) =>
-                            setCardData({ ...cardData, name: e.target.value })
+                            setCardData({ ...cardData, name: e.target.value.toUpperCase() })
                           }
                           className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                           placeholder="JOÃO SILVA"
@@ -223,9 +492,12 @@ export function Payment() {
                           required
                           maxLength={19}
                           value={cardData.number}
-                          onChange={(e) =>
-                            setCardData({ ...cardData, number: e.target.value })
-                          }
+                          onChange={(e) => {
+                            // Formata o número do cartão com espaços
+                            const value = e.target.value.replace(/\D/g, '');
+                            const formatted = value.replace(/(\d{4})(?=\d)/g, '$1 ');
+                            setCardData({ ...cardData, number: formatted });
+                          }}
                           className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                           placeholder="0000 0000 0000 0000"
                         />
@@ -241,9 +513,14 @@ export function Payment() {
                             required
                             maxLength={5}
                             value={cardData.expiry}
-                            onChange={(e) =>
-                              setCardData({ ...cardData, expiry: e.target.value })
-                            }
+                            onChange={(e) => {
+                              // Formata MM/AA
+                              let value = e.target.value.replace(/\D/g, '');
+                              if (value.length >= 2) {
+                                value = value.substring(0, 2) + '/' + value.substring(2, 4);
+                              }
+                              setCardData({ ...cardData, expiry: value });
+                            }}
                             className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                             placeholder="MM/AA"
                           />
@@ -257,7 +534,7 @@ export function Payment() {
                             maxLength={4}
                             value={cardData.cvv}
                             onChange={(e) =>
-                              setCardData({ ...cardData, cvv: e.target.value })
+                              setCardData({ ...cardData, cvv: e.target.value.replace(/\D/g, '') })
                             }
                             className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                             placeholder="123"
@@ -265,13 +542,64 @@ export function Payment() {
                         </div>
                       </div>
 
+                      <div>
+                        <label className="block text-gray-700 mb-2">
+                          CPF do titular
+                        </label>
+                        <input
+                          type="text"
+                          required={mpReady}
+                          maxLength={14}
+                          value={cardData.cpf}
+                          onChange={(e) => {
+                            // Formata CPF
+                            let value = e.target.value.replace(/\D/g, '');
+                            if (value.length > 3) value = value.substring(0, 3) + '.' + value.substring(3);
+                            if (value.length > 7) value = value.substring(0, 7) + '.' + value.substring(7);
+                            if (value.length > 11) value = value.substring(0, 11) + '-' + value.substring(11, 13);
+                            setCardData({ ...cardData, cpf: value });
+                          }}
+                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                          placeholder="000.000.000-00"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-gray-700 mb-2">
+                          Email
+                        </label>
+                        <input
+                          type="email"
+                          required={mpReady}
+                          value={cardData.email}
+                          onChange={(e) =>
+                            setCardData({ ...cardData, email: e.target.value })
+                          }
+                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                          placeholder="seu@email.com"
+                        />
+                      </div>
+
                       <button
                         type="submit"
-                        disabled={loading}
-                        className="w-full bg-secondary hover:bg-green-600 text-white py-4 rounded-lg font-semibold transition-colors mt-6 disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={loading || processingCard}
+                        className="w-full bg-secondary hover:bg-green-600 text-white py-4 rounded-lg font-semibold transition-colors mt-6 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                       >
-                        {loading ? 'Processando...' : 'Confirmar Pagamento'}
+                        {loading || processingCard ? (
+                          <>
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                            {processingCard ? 'Processando cartão...' : 'Finalizando...'}
+                          </>
+                        ) : (
+                          `Pagar R$ ${selectedVoucher.price.toFixed(2).replace('.', ',')}`
+                        )}
                       </button>
+
+                      {mpReady && (
+                        <p className="text-xs text-center text-gray-500 mt-2">
+                          🔒 Pagamento seguro processado pelo Mercado Pago
+                        </p>
+                      )}
                     </div>
                   </form>
                 )}

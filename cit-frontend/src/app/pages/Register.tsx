@@ -6,6 +6,7 @@ import { authAPI, type Voucher } from '@/services/api';
 export function Register() {
   const navigate = useNavigate();
   const [selectedVoucher, setSelectedVoucher] = useState<Voucher | null>(null);
+  const [companySlug, setCompanySlug] = useState<string | null>(null);
   
   useEffect(() => {
     // Buscar voucher selecionado do localStorage
@@ -13,6 +14,9 @@ export function Register() {
     if (stored) {
       setSelectedVoucher(JSON.parse(stored));
     }
+    // Buscar slug da empresa
+    const slug = localStorage.getItem('company_slug');
+    setCompanySlug(slug);
   }, []);
   
   const [formData, setFormData] = useState({
@@ -70,7 +74,7 @@ export function Register() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50">
       <div className="container mx-auto px-4 py-8">
         <button
-          onClick={() => navigate('/')}
+          onClick={() => companySlug ? navigate(`/loja/${companySlug}`) : navigate('/')}
           className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6"
         >
           <ArrowLeft className="w-5 h-5" />
@@ -85,8 +89,17 @@ export function Register() {
                 <h2 className="text-3xl font-bold text-gray-900 mb-2">
                   Cadastro
                 </h2>
-                <p className="text-gray-600 mb-8">
+                <p className="text-gray-600 mb-2">
                   Preencha seus dados para continuar
+                </p>
+                <p className="text-sm text-gray-500 mb-6">
+                  Já tem conta?{' '}
+                  <button
+                    onClick={() => navigate('/login')}
+                    className="text-primary hover:text-blue-700 font-semibold"
+                  >
+                    Faça login
+                  </button>
                 </p>
 
                 {error && (
@@ -253,7 +266,7 @@ export function Register() {
                       Nenhum pacote selecionado
                     </p>
                     <button
-                      onClick={() => navigate('/')}
+                      onClick={() => companySlug ? navigate(`/loja/${companySlug}`) : navigate('/')}
                       className="text-primary hover:text-blue-700 font-semibold"
                     >
                       Escolher pacote

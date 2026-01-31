@@ -3,19 +3,10 @@ import { DollarSign, ShoppingCart, TrendingUp, Users, Loader2 } from 'lucide-rea
 import { useState, useEffect } from 'react';
 import { dashboardAPI, orderAPI } from '@/services/api';
 
-// Dados mockados para os gráficos (já que o backend não retorna série temporal ainda)
-const salesData = [
-  { month: 'Jan', vendas: 45, valor: 450 },
-  { month: 'Fev', vendas: 52, valor: 520 },
-  { month: 'Mar', vendas: 48, valor: 480 },
-  { month: 'Abr', vendas: 61, valor: 610 },
-  { month: 'Mai', vendas: 55, valor: 550 },
-  { month: 'Jun', vendas: 67, valor: 670 },
-];
-
 export function Dashboard() {
   const [stats, setStats] = useState<any>(null);
   const [allOrders, setAllOrders] = useState<any[]>([]);
+  const [monthlyData, setMonthlyData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -28,6 +19,14 @@ export function Dashboard() {
         ]);
         setStats(statsData);
         setAllOrders(ordersData);
+        
+        // Define os dados mensais vindos da API
+        if (statsData.monthly_data && statsData.monthly_data.length > 0) {
+          setMonthlyData(statsData.monthly_data);
+        } else {
+          // Se não houver dados, mostra mensagem vazia
+          setMonthlyData([]);
+        }
       } catch (err) {
         console.error('Erro ao carregar dashboard:', err);
         setError('Erro ao carregar dados');
@@ -96,7 +95,7 @@ export function Dashboard() {
           </div>
           <h3 className="text-gray-600 text-sm mb-1">Média por Voucher</h3>
           <p className="text-3xl font-bold text-gray-900">
-            R$ {stats.total_orders > 0 ? (stats.total_revenue / stats.total_orders).toFixed(2).replace('.', ',') : '0,00'}
+            R$ {stats.paid_orders > 0 ? (stats.total_revenue / stats.paid_orders).toFixed(2).replace('.', ',') : '0,00'}
           </p>
         </div>
 
@@ -119,21 +118,28 @@ export function Dashboard() {
           <h3 className="text-lg font-bold text-gray-900 mb-6">
             Vendas por Mês
           </h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={salesData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="month" stroke="#6b7280" />
-              <YAxis stroke="#6b7280" />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#fff',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '8px',
-                }}
-              />
-              <Bar dataKey="vendas" fill="#0066FF" radius={[8, 8, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          {monthlyData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={monthlyData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="month" stroke="#6b7280" />
+                <YAxis stroke="#6b7280" />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#fff',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '8px',
+                  }}
+                  formatter={(value: number) => [value, 'Vendas']}
+                />
+                <Bar dataKey="vendas" fill="#0066FF" radius={[8, 8, 0, 0]} name="Vendas" />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-[300px] text-gray-500">
+              <p>Nenhuma venda registrada ainda</p>
+            </div>
+          )}
         </div>
 
         {/* Gráfico de receita */}
@@ -141,27 +147,35 @@ export function Dashboard() {
           <h3 className="text-lg font-bold text-gray-900 mb-6">
             Receita por Mês
           </h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={salesData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="month" stroke="#6b7280" />
-              <YAxis stroke="#6b7280" />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#fff',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '8px',
-                }}
-              />
-              <Line
-                type="monotone"
-                dataKey="valor"
-                stroke="#00D166"
-                strokeWidth={3}
-                dot={{ fill: '#00D166', r: 6 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          {monthlyData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={monthlyData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="month" stroke="#6b7280" />
+                <YAxis stroke="#6b7280" />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#fff',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '8px',
+                  }}
+                  formatter={(value: number) => [`R$ ${value.toFixed(2).replace('.', ',')}`, 'Receita']}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="valor"
+                  stroke="#00D166"
+                  strokeWidth={3}
+                  dot={{ fill: '#00D166', r: 6 }}
+                  name="Receita"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-[300px] text-gray-500">
+              <p>Nenhuma receita registrada ainda</p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -198,8 +212,11 @@ export function Dashboard() {
               <tbody>
                 {allOrders.map((order: any) => (
                   <tr key={order.id} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="py-4 px-4 text-gray-900">
-                      {order.user_id}
+                    <td className="py-4 px-4">
+                      <div>
+                        <p className="font-medium text-gray-900">{order.user_name || 'Desconhecido'}</p>
+                        <p className="text-sm text-gray-500">{order.user_email || ''}</p>
+                      </div>
                     </td>
                     <td className="py-4 px-4 text-gray-600">
                       {order.voucher_hours} {order.voucher_hours === 1 ? 'Hora' : 'Horas'}

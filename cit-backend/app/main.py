@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database.mongo import connect_to_mongo, close_mongo_connection
-from app.routes import auth, admin, client, payment
+from app.routes import auth, admin, client, payment, public
 from app.services.voucher_service import VoucherService
 
 app = FastAPI(
@@ -38,6 +38,7 @@ app.include_router(auth.router)
 app.include_router(admin.router)
 app.include_router(client.router)
 app.include_router(payment.router)
+app.include_router(public.router)
 
 
 @app.get("/")

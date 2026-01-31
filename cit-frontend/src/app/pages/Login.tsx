@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Mail, Lock, Wifi, AlertCircle, Loader2 } from 'lucide-react';
 import { authAPI } from '@/services/api';
@@ -11,6 +11,13 @@ export function Login() {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [hasVoucher, setHasVoucher] = useState(false);
+
+  useEffect(() => {
+    // Verificar se tem voucher selecionado
+    const voucher = localStorage.getItem('selectedVoucher');
+    setHasVoucher(!!voucher);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,8 +34,13 @@ export function Login() {
       // Salvar usuário no localStorage
       localStorage.setItem('user', JSON.stringify(user));
       
-      // Redirecionar baseado no role
-      if (user.role === 'admin') {
+      // Verificar se tem voucher selecionado (fluxo de compra)
+      const selectedVoucher = localStorage.getItem('selectedVoucher');
+      
+      if (selectedVoucher && user.role === 'client') {
+        // Se tem voucher selecionado, vai para o carrinho
+        navigate('/carrinho');
+      } else if (user.role === 'admin') {
         navigate('/admin/dashboard');
       } else {
         navigate('/cliente/painel');
@@ -39,6 +51,15 @@ export function Login() {
       setError(message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleBack = () => {
+    const slug = localStorage.getItem('company_slug');
+    if (slug) {
+      navigate(`/loja/${slug}`);
+    } else {
+      navigate('/');
     }
   };
 
@@ -121,9 +142,21 @@ export function Login() {
               </button>
             </form>
 
+            {hasVoucher && (
+              <div className="mt-6 pt-6 border-t border-gray-200 text-center">
+                <p className="text-gray-600 mb-2">Não tem conta?</p>
+                <button
+                  onClick={() => navigate('/cadastro')}
+                  className="text-primary hover:text-blue-700 font-semibold"
+                >
+                  Criar conta
+                </button>
+              </div>
+            )}
+
             <div className="mt-6 text-center">
               <button
-                onClick={() => navigate('/')}
+                onClick={handleBack}
                 className="text-gray-600 hover:text-gray-900"
               >
                 Voltar para página inicial

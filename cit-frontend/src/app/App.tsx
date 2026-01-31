@@ -9,6 +9,7 @@ import { Cart } from '@/app/pages/Cart';
 import { Payment } from '@/app/pages/Payment';
 import { Confirmation } from '@/app/pages/Confirmation';
 import { Login } from '@/app/pages/Login';
+import { StorePage } from '@/app/pages/Store';
 
 // Páginas admin
 import { Dashboard } from '@/app/pages/admin/Dashboard';
@@ -34,6 +35,7 @@ function AppRoutes() {
     <Routes>
       {/* Rotas públicas */}
       <Route path="/" element={<Packages />} />
+      <Route path="/loja/:slug" element={<StorePage />} />
       <Route path="/cadastro" element={<Register />} />
       <Route path="/carrinho" element={<Cart />} />
       <Route path="/pagamento" element={<Payment />} />

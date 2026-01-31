@@ -95,6 +95,7 @@ export interface Order {
 export interface CreateOrderRequest {
   voucher_id: string;
   payment_method: 'pix' | 'credit' | 'debit';
+  company_slug?: string;  // Slug da empresa para associar o pedido
 }
 
 export interface Payment {
@@ -104,7 +105,11 @@ export interface Payment {
   status: string;
   amount: number;
   pix_qrcode?: string;
+  pix_key?: string;
   card_last_digits?: string;
+  mercadopago_payment_id?: string;
+  status_detail?: string;
+  installments?: number;
   created_at: string;
 }
 
@@ -114,6 +119,13 @@ export interface ProcessPaymentRequest {
   card_number?: string;
   card_cvv?: string;
   card_expiry?: string;
+  card_token?: string;  // Token do Mercado Pago SDK
+  card_payment_method_id?: string;  // visa, master, etc
+  card_installments?: number;  // Número de parcelas
+  payer_email?: string;  // Email do pagador
+  card_holder_name?: string;  // Nome no cartão
+  identification_type?: string;  // CPF, CNPJ
+  identification_number?: string;  // Número do documento
 }
 
 export interface DashboardData {
@@ -241,6 +253,14 @@ export const orderAPI = {
 
 export const paymentAPI = {
   /**
+   * Retorna a public key do Mercado Pago
+   */
+  getMercadoPagoPublicKey: async (): Promise<{ public_key: string }> => {
+    const response = await api.get<{ public_key: string }>('/payment/mercadopago/public-key');
+    return response.data;
+  },
+
+  /**
    * Processa um pagamento
    */
   process: async (data: ProcessPaymentRequest): Promise<Payment> => {
@@ -327,6 +347,22 @@ export const adminAPI = {
    */
   getFinancial: async (): Promise<any> => {
     const response = await api.get('/admin/financial');
+    return response.data;
+  },
+
+  /**
+   * Retorna todas as configurações (empresa + financeiro)
+   */
+  getConfig: async (): Promise<any> => {
+    const response = await api.get('/admin/config');
+    return response.data;
+  },
+
+  /**
+   * Atualiza configurações (empresa e/ou financeiro)
+   */
+  updateConfig: async (data: any): Promise<{ message: string }> => {
+    const response = await api.put('/admin/config', data);
     return response.data;
   },
 };

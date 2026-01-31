@@ -74,6 +74,19 @@ export function Financial() {
       </div>
 
       <div className="bg-white rounded-xl shadow-lg p-8 max-w-3xl">
+        {/* Alerta informativo sobre PIX */}
+        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-3">
+          <Key className="w-5 h-5 text-blue-600 mt-0.5" />
+          <div>
+            <p className="text-blue-900 font-semibold mb-1">
+              Chave PIX para Pagamentos
+            </p>
+            <p className="text-sm text-blue-700">
+              A chave PIX cadastrada aqui será utilizada para gerar os códigos de pagamento dos clientes. Certifique-se de inserir uma chave válida e ativa.
+            </p>
+          </div>
+        </div>
+
         {saved && (
           <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-3">
             <Check className="w-5 h-5 text-green-600" />
@@ -161,9 +174,9 @@ export function Financial() {
           </div>
 
           <div>
-            <label className="block text-gray-700 mb-2">
+            <label className="block text-gray-700 mb-2 font-semibold">
               <Key className="w-4 h-4 inline mr-2" />
-              Chave PIX
+              Chave PIX *
             </label>
             <input
               type="text"
@@ -175,11 +188,14 @@ export function Financial() {
               className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
               placeholder="email@example.com, CPF/CNPJ ou chave aleatória"
             />
+            <p className="text-xs text-gray-500 mt-1">
+              Esta chave será usada para receber os pagamentos PIX dos clientes
+            </p>
           </div>
 
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <p className="text-sm text-blue-800">
-              <strong>Importante:</strong> Essas informações serão usadas para processar os pagamentos recebidos. Certifique-se de que todos os dados estão corretos.
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+            <p className="text-sm text-amber-800">
+              <strong>Importante:</strong> Essas informações serão usadas para processar os pagamentos recebidos. A chave PIX é obrigatória para que os clientes possam efetuar pagamentos.
             </p>
           </div>
 
