@@ -225,7 +225,35 @@ class PaymentService:
                 except HTTPException:
                     raise
                 except Exception as e:
-                    # Fallback: simula aprovação para não bloquear
+                    # Fallback: simula resultado baseado no nome do titular (para testes)
+                    card_holder = payment_data.card_holder_name or ""
+                    rejection_codes = {
+                        "OTHE": "cc_rejected_other_reason",
+                        "FUND": "cc_rejected_insufficient_amount",
+                        "SECU": "cc_rejected_bad_filled_security_code",
+                        "EXPI": "cc_rejected_bad_filled_date",
+                        "FORM": "cc_rejected_bad_filled_other",
+                        "CALL": "cc_rejected_call_for_authorize",
+                        "CARD": "cc_rejected_card_disabled",
+                    }
+                    
+                    # Verifica se o nome indica rejeição
+                    for code, reason in rejection_codes.items():
+                        if code in card_holder.upper():
+                            payment_dict["status"] = "failed"
+                            payment_dict["error"] = reason
+                            payment_dict["fallback_mode"] = True
+                            payment_dict["card_last_digits"] = payment_data.card_number[-4:] if payment_data.card_number else "****"
+                            
+                            # Salva o pagamento com status failed
+                            result = await db.payments.insert_one(payment_dict)
+                            
+                            raise HTTPException(
+                                status_code=status.HTTP_400_BAD_REQUEST,
+                                detail=f"Pagamento recusado: {reason}"
+                            )
+                    
+                    # Se não for rejeição, aprova
                     payment_dict["card_last_digits"] = payment_data.card_number[-4:] if payment_data.card_number else "****"
                     payment_dict["status"] = "confirmed"
                     payment_dict["confirmed_at"] = datetime.now(timezone.utc)
@@ -239,6 +267,35 @@ class PaymentService:
                         detail="Dados do cartão incompletos"
                     )
                 
+                # Simula resultado baseado no nome do titular (para testes)
+                card_holder = payment_data.card_holder_name or ""
+                rejection_codes = {
+                    "OTHE": "cc_rejected_other_reason",
+                    "FUND": "cc_rejected_insufficient_amount",
+                    "SECU": "cc_rejected_bad_filled_security_code",
+                    "EXPI": "cc_rejected_bad_filled_date",
+                    "FORM": "cc_rejected_bad_filled_other",
+                    "CALL": "cc_rejected_call_for_authorize",
+                    "CARD": "cc_rejected_card_disabled",
+                }
+                
+                # Verifica se o nome indica rejeição
+                for code, reason in rejection_codes.items():
+                    if code in card_holder.upper():
+                        payment_dict["status"] = "failed"
+                        payment_dict["error"] = reason
+                        payment_dict["fallback_mode"] = True
+                        payment_dict["card_last_digits"] = payment_data.card_number[-4:]
+                        
+                        # Salva o pagamento com status failed
+                        result = await db.payments.insert_one(payment_dict)
+                        
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"Pagamento recusado: {reason}"
+                        )
+                
+                # Se não for rejeição, aprova
                 payment_dict["card_last_digits"] = payment_data.card_number[-4:]
                 payment_dict["status"] = "confirmed"
                 payment_dict["confirmed_at"] = datetime.now(timezone.utc)

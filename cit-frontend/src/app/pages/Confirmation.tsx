@@ -68,10 +68,17 @@ export function Confirmation() {
               )}
 
               <button
-                onClick={() => navigate('/')}
+                onClick={() => {
+                  const slug = localStorage.getItem('company_slug');
+                  if (slug) {
+                    navigate(`/loja/${slug}`);
+                  } else {
+                    navigate('/');
+                  }
+                }}
                 className="w-full border-2 border-gray-200 hover:border-gray-300 text-gray-700 py-3 rounded-lg font-semibold transition-colors"
               >
-                Voltar para Início
+                Comprar Mais
               </button>
             </div>
 

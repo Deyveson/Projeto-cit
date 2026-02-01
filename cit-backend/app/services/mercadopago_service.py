@@ -209,6 +209,41 @@ class MercadoPagoService:
             return {"payment_methods": []}
     
     @staticmethod
+    async def get_payment(payment_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Busca os dados de um pagamento específico pelo ID
+        
+        Args:
+            payment_id: ID do pagamento no Mercado Pago
+            
+        Returns:
+            Dict com dados do pagamento ou None se não encontrado
+        """
+        access_token = MercadoPagoService.get_access_token()
+        
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json"
+        }
+        
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{MercadoPagoService.BASE_URL}/v1/payments/{payment_id}",
+                    headers=headers,
+                    timeout=30.0
+                )
+                
+                if response.status_code != 200:
+                    return None
+                
+                return response.json()
+                
+        except httpx.RequestError as e:
+            print(f"Erro ao buscar pagamento {payment_id}: {e}")
+            return None
+    
+    @staticmethod
     async def create_qr_order(
         amount: float,
         description: str,

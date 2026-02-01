@@ -3,6 +3,40 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, CreditCard, QrCode, Copy, Check, Loader2 } from 'lucide-react';
 import { Voucher, orderAPI, paymentAPI } from '@/services/api';
 
+// Mapeamento de mensagens de erro do Mercado Pago para mensagens amigáveis
+const getPaymentErrorMessage = (errorDetail: string): string => {
+  const errorMessages: Record<string, string> = {
+    'cc_rejected_other_reason': 'Pagamento não autorizado. Tente outro cartão ou método de pagamento.',
+    'cc_rejected_call_for_authorize': 'Pagamento requer autorização. Entre em contato com seu banco.',
+    'cc_rejected_insufficient_amount': 'Saldo insuficiente no cartão.',
+    'cc_rejected_bad_filled_security_code': 'Código de segurança (CVV) inválido.',
+    'cc_rejected_bad_filled_date': 'Data de validade inválida.',
+    'cc_rejected_bad_filled_other': 'Dados do cartão inválidos. Verifique as informações.',
+    'cc_rejected_card_disabled': 'Cartão desabilitado. Entre em contato com seu banco.',
+    'cc_rejected_max_attempts': 'Limite de tentativas excedido. Tente novamente mais tarde.',
+    'cc_rejected_duplicated_payment': 'Pagamento duplicado. Verifique se já não foi realizado.',
+    'cc_rejected_card_type_not_allowed': 'Tipo de cartão não permitido. Tente outro cartão.',
+    'cc_rejected_invalid_installments': 'Número de parcelas inválido.',
+    'cc_rejected_blacklist': 'Pagamento não autorizado por motivos de segurança.',
+    'pending_contingency': 'Pagamento pendente de processamento.',
+    'pending_review_manual': 'Pagamento em análise.',
+  };
+
+  // Verifica se o erro contém algum dos códigos conhecidos
+  for (const [code, message] of Object.entries(errorMessages)) {
+    if (errorDetail.toLowerCase().includes(code.toLowerCase())) {
+      return message;
+    }
+  }
+
+  // Se não encontrar, retorna mensagem genérica
+  if (errorDetail.toLowerCase().includes('rejected') || errorDetail.toLowerCase().includes('recusado')) {
+    return 'Pagamento não autorizado. Tente outro cartão ou método de pagamento.';
+  }
+
+  return errorDetail;
+};
+
 // Declaração global para o SDK do Mercado Pago
 declare global {
   interface Window {
@@ -93,21 +127,54 @@ export function Payment() {
       // Separa mês e ano da validade
       const [expMonth, expYear] = cardData.expiry.split('/');
       
+      // Usa o método fields do SDK v2 para criar token
       const cardTokenData = {
         cardNumber: cardData.number.replace(/\s/g, ''),
         cardholderName: cardData.name,
         cardExpirationMonth: expMonth,
-        cardExpirationYear: `20${expYear}`,
+        cardExpirationYear: expYear.length === 2 ? `20${expYear}` : expYear,
         securityCode: cardData.cvv,
         identificationType: 'CPF',
         identificationNumber: cardData.cpf.replace(/\D/g, ''),
       };
 
-      const response = await cardFormRef.current.createCardToken(cardTokenData);
-      return response.id;
+      // Tenta o método createCardToken do SDK
+      const response = await cardFormRef.current.fields.createCardToken(cardTokenData);
+      return response?.id || null;
     } catch (err: any) {
-      console.error('Erro ao criar token do cartão:', err);
-      throw new Error(err.message || 'Erro ao processar dados do cartão');
+      console.error('Erro ao criar token do cartão (método 1):', err);
+      
+      // Tenta método alternativo
+      try {
+        const [expMonth, expYear] = cardData.expiry.split('/');
+        
+        const formData = new FormData();
+        formData.append('card_number', cardData.number.replace(/\s/g, ''));
+        formData.append('cardholder[name]', cardData.name);
+        formData.append('card_expiration_month', expMonth);
+        formData.append('card_expiration_year', expYear.length === 2 ? `20${expYear}` : expYear);
+        formData.append('security_code', cardData.cvv);
+        formData.append('cardholder[identification][type]', 'CPF');
+        formData.append('cardholder[identification][number]', cardData.cpf.replace(/\D/g, ''));
+        
+        const { public_key } = await paymentAPI.getMercadoPagoPublicKey();
+        
+        const response = await fetch(`https://api.mercadopago.com/v1/card_tokens?public_key=${public_key}`, {
+          method: 'POST',
+          body: formData
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          return data.id;
+        }
+        
+        console.error('Erro na API de token:', await response.text());
+        return null;
+      } catch (apiError) {
+        console.error('Erro ao criar token do cartão (método 2):', apiError);
+        return null;
+      }
     }
   };
 
@@ -222,7 +289,8 @@ export function Payment() {
     } catch (err: any) {
       console.error('Payment error:', err);
       setProcessingCard(false);
-      const errorMessage = err.response?.data?.detail || err.message || 'Erro ao processar pagamento';
+      const rawMessage = err.response?.data?.detail || err.message || 'Erro ao processar pagamento';
+      const errorMessage = getPaymentErrorMessage(rawMessage);
       setError(errorMessage);
     } finally {
       setLoading(false);

@@ -3,7 +3,6 @@ import { AppProvider } from '@/app/context/AppContext';
 import { AdminLayout } from '@/app/components/AdminLayout';
 
 // Páginas públicas
-import { Packages } from '@/app/pages/Packages';
 import { Register } from '@/app/pages/Register';
 import { Cart } from '@/app/pages/Cart';
 import { Payment } from '@/app/pages/Payment';
@@ -34,7 +33,7 @@ function AppRoutes() {
   return (
     <Routes>
       {/* Rotas públicas */}
-      <Route path="/" element={<Packages />} />
+      <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/loja/:slug" element={<StorePage />} />
       <Route path="/cadastro" element={<Register />} />
       <Route path="/carrinho" element={<Cart />} />
