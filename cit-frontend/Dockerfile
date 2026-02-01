@@ -1,4 +1,4 @@
-FROM node:20-alpine
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
@@ -11,8 +11,22 @@ RUN npm install
 # Copia o código da aplicação
 COPY . .
 
-# Expõe a porta 5173
+# Build para produção
+RUN npm run build
+
+# Estágio de produção com servidor estático
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Instala serve para servir arquivos estáticos
+RUN npm install -g serve
+
+# Copia arquivos buildados
+COPY --from=builder /app/dist ./dist
+
+# Railway usa variável PORT
 EXPOSE 5173
 
-# Comando para executar em modo desenvolvimento
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+# Serve os arquivos estáticos
+CMD ["sh", "-c", "serve -s dist -l ${PORT:-5173}"]
