@@ -25,8 +25,11 @@ RUN npm install -g serve
 # Copia arquivos buildados
 COPY --from=builder /app/dist ./dist
 
+# Copia configuração do serve para SPA
+COPY --from=builder /app/serve.json ./serve.json
+
 # Railway usa variável PORT
 EXPOSE 5173
 
-# Serve os arquivos estáticos
-CMD ["sh", "-c", "serve -s dist -l ${PORT:-5173}"]
+# Serve os arquivos estáticos (com config para SPA)
+CMD ["sh", "-c", "serve -s dist -l ${PORT:-5173} -c ../serve.json"]
