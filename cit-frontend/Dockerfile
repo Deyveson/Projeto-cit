@@ -37,5 +37,5 @@ RUN ls -la dist/
 # Railway usa variável PORT
 EXPOSE 5173
 
-# Serve os arquivos estáticos (com config para SPA)
-CMD ["sh", "-c", "serve dist -l ${PORT:-5173}"]
+# Serve os arquivos estáticos (-s para SPA mode)
+CMD ["sh", "-c", "serve -s dist -l ${PORT:-5173}"]
