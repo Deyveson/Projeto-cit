@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, CreditCard, QrCode, Copy, Check, Loader2 } from 'lucide-react';
+import { ArrowLeft, CreditCard, QrCode as QrCodeIcon, Copy, Check, Loader2 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { Voucher, orderAPI, paymentAPI } from '@/services/api';
 
 // Mapeamento de mensagens de erro do Mercado Pago para mensagens amigáveis
@@ -371,7 +372,7 @@ export function Payment() {
                         : 'border-gray-200 hover:border-gray-300'
                     } disabled:opacity-50`}
                   >
-                    <QrCode
+                    <QrCodeIcon
                       className={`w-8 h-8 mx-auto mb-2 ${
                         paymentMethod === 'pix' ? 'text-primary' : 'text-gray-400'
                       }`}
@@ -417,7 +418,7 @@ export function Payment() {
                     </h3>
                     <div className="bg-gray-50 rounded-lg p-6 text-center">
                       <div className="bg-white p-4 rounded-lg inline-block mb-4">
-                        <QrCode className="w-48 h-48 text-gray-800" />
+                        <QrCodeIcon className="w-48 h-48 text-gray-800" />
                       </div>
                       <p className="text-gray-600 mb-2">
                         Clique em confirmar para gerar o código PIX
@@ -445,8 +446,13 @@ export function Payment() {
                     <div className="bg-gradient-to-br from-blue-50 to-green-50 rounded-lg p-6">
                       <div className="bg-white p-6 rounded-lg mb-4">
                         <div className="text-center mb-4">
-                          <div className="bg-gray-100 p-4 rounded-lg inline-block mb-3">
-                            <QrCode className="w-32 h-32 text-gray-800" />
+                          <div className="bg-white p-4 rounded-lg inline-block mb-3 border border-gray-200">
+                            <QRCodeSVG 
+                              value={pixCode} 
+                              size={192}
+                              level="M"
+                              includeMargin={true}
+                            />
                           </div>
                           <p className="text-sm text-gray-600">
                             Escaneie o QR Code acima com o app do seu banco
