@@ -29,18 +29,17 @@ services:
       MERCADOPAGO_ACCESS_TOKEN: ${MERCADOPAGO_ACCESS_TOKEN:-}
       MERCADOPAGO_PUBLIC_KEY: ${MERCADOPAGO_PUBLIC_KEY:-}
       MERCADOPAGO_WEBHOOK_SECRET: ${MERCADOPAGO_WEBHOOK_SECRET:-}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      FRONTEND_URL: ${FRONTEND_URL:-http://168.228.4.83:5173}
     depends_on:
       - mongo
     networks:
       - cit-network
-    # Sem volume em produção - usa arquivos do container
 
   frontend:
     build:
       context: ./cit-frontend
       args:
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+        VITE_API_BASE_URL: http://168.228.4.83:8000
     container_name: cit-frontend
     restart: always
     ports:
@@ -49,7 +48,6 @@ services:
       - backend
     networks:
       - cit-network
-    # Sem volume em produção - usa arquivos buildados do container
 
 volumes:
   mongo-data:
