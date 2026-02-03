@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  mongo:
+    image: mongo:7.0
+    container_name: cit-mongodb
+    restart: always
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: cit
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - cit-network
+
+  backend:
+    build: ./cit-backend
+    container_name: cit-backend
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      MONGODB_URL: mongodb://mongo:27017
+      DATABASE_NAME: cit
+      SECRET_KEY: ${SECRET_KEY:-your-super-secret-key-change-in-production-please}
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 30
+      MERCADOPAGO_ACCESS_TOKEN: ${MERCADOPAGO_ACCESS_TOKEN:-}
+      MERCADOPAGO_PUBLIC_KEY: ${MERCADOPAGO_PUBLIC_KEY:-}
+      MERCADOPAGO_WEBHOOK_SECRET: ${MERCADOPAGO_WEBHOOK_SECRET:-}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+    depends_on:
+      - mongo
+    networks:
+      - cit-network
+    # Sem volume em produção - usa arquivos do container
+
+  frontend:
+    build: ./cit-frontend
+    container_name: cit-frontend
+    restart: always
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    depends_on:
+      - backend
+    networks:
+      - cit-network
+    # Sem volume em produção - usa arquivos buildados do container
+
+volumes:
+  mongo-data:
+
+networks:
+  cit-network:
+    driver: bridge
