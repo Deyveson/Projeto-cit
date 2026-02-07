@@ -26,11 +26,12 @@ export function Login() {
     
     try {
       // Fazer login na API
-      await authAPI.login(formData);
-      
+      const loginResponse = await authAPI.login(formData);
+      console.log('Login response:', loginResponse);
+      console.log('Token salvo:', localStorage.getItem('access_token'));
       // Buscar dados do usuário
       const user = await authAPI.getMe();
-      
+      console.log('User response:', user);
       // Salvar usuário no localStorage
       localStorage.setItem('user', JSON.stringify(user));
       
