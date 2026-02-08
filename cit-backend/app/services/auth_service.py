@@ -84,3 +84,13 @@ class AuthService:
             return None
         user = await db.users.find_one({"_id": ObjectId(user_id)})
         return user
+    
+    @staticmethod
+    async def update_hours_by_email(email: str, hours: float):
+        """Atualiza o saldo de horas de um usuário pelo email"""
+        db = get_database()
+        result = await db.users.update_one(
+            {"email": email},
+            {"$set": {"hours_balance": hours, "updated_at": datetime.now(timezone.utc)}}
+        )
+        return result.modified_count > 0
