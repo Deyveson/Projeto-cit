@@ -3,6 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.schemas.user import UserCreate, UserLogin, UserResponse, Token
 from app.services.auth_service import AuthService
 from app.core.security import decode_access_token
+import logging
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 security = HTTPBearer()
@@ -86,6 +87,8 @@ async def get_me(current_user: dict = Depends(get_current_user)):
 @router.post("/update_hours")
 async def update_hours(email: str = Body(...), hours: float = Body(...)):
     """Atualiza o saldo de horas do usuário cliente pelo email"""
+    logging.warning(f"[update_hours] email recebido: {email}")
+    logging.warning(f"[update_hours] hours recebido: {hours}")
     updated = await AuthService.update_hours_by_email(email, hours)
     if not updated:
         raise HTTPException(status_code=404, detail="Usuário não encontrado ou horas não atualizadas")
